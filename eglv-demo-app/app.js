@@ -74,6 +74,24 @@ const microsoftIntegrations = [
   ["Azure Data Store", "Persistenz fuer Projekte, Leads, Entscheidungen und Audit-Events"]
 ];
 
+const demoFlow = [
+  { id: "briefing", label: "Briefing", screen: "dashboard" },
+  { id: "portfolio", label: "Kanban", screen: "kanban" },
+  { id: "gate2", label: "Gate 2", screen: "gate" },
+  { id: "stage3", label: "Stage 3", screen: "stage3" },
+  { id: "archive", label: "Archiv", screen: "archive" },
+  { id: "settings", label: "Architektur", screen: "settings" }
+];
+
+const apiContracts = [
+  ["GET", "/api/projects", "Portfolio, Kanban und Projekt-Drawer laden", "Azure Data Store"],
+  ["POST", "/api/projects", "Neue BD-Vorhaben strukturiert anlegen", "Azure Functions"],
+  ["POST", "/api/decisions", "Gate-Entscheidungen revisionsfaehig speichern", "SharePoint / Audit Log"],
+  ["POST", "/api/agent-tasks", "Kontrollierte Agentenaufgaben fuer Nachweise starten", "Azure AI + Graph"],
+  ["POST", "/api/leads", "QR-Demo-Leads mit DSGVO-Zustimmung erfassen", "Graph Mail / Outlook"],
+  ["GET", "/api/process-definition", "Stage-Gate-Definition und Regeln laden", "Azure Data Store"]
+];
+
 const seedData = {
   projects: [
     {
@@ -100,6 +118,7 @@ const seedData = {
         { id: "safety", label: "EHS- und Genehmigungsrisiken pruefen", required: true, done: false },
         { id: "pilot-budget", label: "Pilotbudget finalisieren", required: true, done: false }
       ],
+      agentTasks: [],
       decisions: [],
       reminders: []
     },
@@ -121,6 +140,9 @@ const seedData = {
         { id: "owner", label: "Interner Sponsor identifiziert", required: true, done: true }
       ],
       stage3Evidence: [],
+      agentTasks: [
+        { id: "stormwater-data", label: "Datenquellen fuer Starkregenmodell klaeren", status: "in Bearbeitung", owner: "BD Agent" }
+      ],
       decisions: [],
       reminders: []
     },
@@ -142,6 +164,7 @@ const seedData = {
         { id: "partner", label: "Partnerstruktur", required: true, done: true }
       ],
       stage3Evidence: [],
+      agentTasks: [],
       decisions: [],
       reminders: []
     }
@@ -150,7 +173,25 @@ const seedData = {
     { id: "cost-cap", label: "Projektkosten duerfen im Demo-Pilot nicht groesser als 250.000 Euro sein.", scope: "global" },
     { id: "evidence-lock", label: "Pflichtnachweise muessen vor Stage-Abschluss vollstaendig sein.", scope: "global" }
   ],
-  archived: []
+  archived: [],
+  auditLog: [
+    {
+      id: "audit-seed",
+      action: "Demo vorbereitet",
+      project: "Pflanzenkohle / Pyrolyse",
+      detail: "Projekt startet Gate-ready bei Gate 2.",
+      createdAt: new Date().toISOString()
+    }
+  ],
+  apiEvents: [
+    {
+      id: "api-seed",
+      method: "GET",
+      path: "/api/projects",
+      entity: "Portfolio initial geladen",
+      createdAt: new Date().toISOString()
+    }
+  ]
 };
 
 const state = {
@@ -185,16 +226,61 @@ function saveSession(session) {
 function loadData() {
   try {
     const stored = JSON.parse(localStorage.getItem(DATA_KEY));
-    if (stored?.projects) return stored;
+    if (stored?.projects) return normalizeData(stored);
   } catch {
-    return null;
+    const seeded = cloneSeedData();
+    localStorage.setItem(DATA_KEY, JSON.stringify(seeded));
+    return seeded;
   }
-  localStorage.setItem(DATA_KEY, JSON.stringify(seedData));
+  const seeded = cloneSeedData();
+  localStorage.setItem(DATA_KEY, JSON.stringify(seeded));
+  return seeded;
+}
+
+function cloneSeedData() {
   return JSON.parse(JSON.stringify(seedData));
+}
+
+function normalizeProject(project, seedProject = {}) {
+  return {
+    ...seedProject,
+    ...project,
+    evidence: project.evidence || seedProject.evidence || [],
+    stage3Evidence: project.stage3Evidence || seedProject.stage3Evidence || [],
+    agentTasks: project.agentTasks || seedProject.agentTasks || [],
+    decisions: project.decisions || [],
+    reminders: project.reminders || []
+  };
+}
+
+function normalizeData(data) {
+  const fallback = cloneSeedData();
+  return {
+    ...fallback,
+    ...data,
+    projects: (data.projects || fallback.projects).map((project) => {
+      const seedProject = fallback.projects.find((item) => item.id === project.id);
+      return normalizeProject(project, seedProject);
+    }),
+    archived: (data.archived || []).map((project) => normalizeProject(project)),
+    rules: data.rules?.length ? data.rules : fallback.rules,
+    auditLog: data.auditLog?.length ? data.auditLog : fallback.auditLog,
+    apiEvents: data.apiEvents?.length ? data.apiEvents : fallback.apiEvents
+  };
 }
 
 function saveData() {
   localStorage.setItem(DATA_KEY, JSON.stringify(state.data));
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[char]);
 }
 
 function getProject(id = state.selectedProjectId) {
@@ -217,6 +303,39 @@ function updateProjectProgress(project) {
   if (!list.length) return;
   const done = list.filter((item) => item.done).length;
   project.progress = Math.round((done / list.length) * 100);
+}
+
+function recordAudit(action, project, detail) {
+  state.data.auditLog.unshift({
+    id: `audit-${Date.now()}`,
+    action,
+    project,
+    detail,
+    createdAt: new Date().toISOString()
+  });
+  state.data.auditLog = state.data.auditLog.slice(0, 8);
+}
+
+function recordApiEvent(method, path, entity) {
+  state.data.apiEvents.unshift({
+    id: `api-${Date.now()}`,
+    method,
+    path,
+    entity,
+    createdAt: new Date().toISOString()
+  });
+  state.data.apiEvents = state.data.apiEvents.slice(0, 8);
+}
+
+function getDemoStepIndex() {
+  const archivedPyrolysis = state.data.archived.some((project) => project.id === "pyrolysis");
+  const pyrolysis = state.data.projects.find((project) => project.id === "pyrolysis");
+  if (state.screen === "settings") return 5;
+  if (archivedPyrolysis || state.screen === "archive") return 4;
+  if (pyrolysis?.stage === "stage-3" || state.screen === "stage3") return 3;
+  if (state.screen === "gate") return 2;
+  if (state.screen === "kanban") return 1;
+  return 0;
 }
 
 function setScreen(screen) {
@@ -312,6 +431,8 @@ function decideGate2() {
     decidedAt: new Date().toISOString(),
     rationale: "Business Case, Rechtsform und Foerderpotenzial sind fuer den Pilotpfad ausreichend belastbar."
   });
+  recordAudit("Gate 2 entschieden", project.name, `Managemententscheidung: ${state.selectedDecision.toUpperCase()}.`);
+  recordApiEvent("POST", "/api/decisions", `${project.name}: Gate 2 ${state.selectedDecision.toUpperCase()}`);
   if (state.selectedDecision === "go") {
     project.stage = "stage-3";
     project.status = "in_progress";
@@ -337,6 +458,8 @@ function toggleStage3Evidence(id) {
   const item = project.stage3Evidence.find((evidence) => evidence.id === id);
   if (item) item.done = !item.done;
   updateProjectProgress(project);
+  recordAudit("Nachweis aktualisiert", project.name, `${item?.label || "Nachweis"}: ${item?.done ? "erfuellt" : "offen"}.`);
+  recordApiEvent("PATCH", `/api/projects/${project.id}/evidence/${id}`, item?.done ? "Nachweis erfuellt" : "Nachweis offen");
   saveData();
   render();
 }
@@ -350,10 +473,13 @@ function failGate3() {
     decidedAt: new Date().toISOString(),
     rationale: "Skalierbarkeit und Betriebsreife sind fuer einen Roll-out noch nicht ausreichend nachgewiesen."
   });
+  recordApiEvent("POST", "/api/decisions", `${project.name}: Gate 3 STOP`);
   archiveProject(project, "Stop in Gate 3: Skalierung nicht freigegeben");
 }
 
 function archiveProject(project, reason) {
+  recordAudit("Projekt archiviert", project.name, reason);
+  recordApiEvent("POST", `/api/projects/${project.id}/archive`, reason);
   state.data.archived.push({
     ...project,
     archivedAt: new Date().toISOString(),
@@ -372,6 +498,8 @@ function setArchiveReminder(projectId, value) {
   const project = state.data.archived.find((item) => item.id === projectId);
   if (!project) return;
   project.reminderAt = value;
+  recordAudit("Erinnerung gesetzt", project.name, value || "Keine Erinnerung");
+  recordApiEvent("PATCH", `/api/archive/${projectId}/reminder`, value || "leer");
   saveData();
   render();
 }
@@ -402,6 +530,8 @@ function addProject(event) {
     reminders: []
   };
   state.data.projects.unshift(project);
+  recordAudit("Projekt angelegt", project.name, "Neues Vorhaben wurde in Stage 0 eingeordnet.");
+  recordApiEvent("POST", "/api/projects", project.name);
   saveData();
   state.modal = null;
   state.screen = "kanban";
@@ -415,9 +545,55 @@ function addRule(event) {
   const label = String(form.get("rule") || "").trim();
   if (!label) return;
   state.data.rules.push({ id: `rule-${Date.now()}`, label, scope: "global" });
+  recordAudit("Regel ergaenzt", "Stage-Gate-Prozess", label);
+  recordApiEvent("POST", "/api/process-definition/rules", label);
   saveData();
   event.currentTarget.reset();
   showToast("Neue Prozessregel wurde gespeichert.");
+}
+
+function assignAgentCollection() {
+  const project = getProject();
+  if (!project) return;
+  const list = project.stage === "stage-3" ? project.stage3Evidence : project.evidence;
+  const missing = list.filter((item) => item.required && !item.done);
+  if (!missing.length) {
+    showToast("Alle Pflichtnachweise sind vorhanden. Der Agent empfiehlt die naechste Gate-Entscheidung.");
+    return;
+  }
+  const createdAt = new Date().toISOString();
+  const tasks = missing.map((item, index) => ({
+    id: `task-${Date.now()}-${index}`,
+    label: `Nachweis beschaffen: ${item.label}`,
+    status: index === 0 ? "in Bearbeitung" : "geplant",
+    owner: "BD Agent",
+    createdAt
+  }));
+  project.agentTasks = [...tasks, ...(project.agentTasks || [])].slice(0, 6);
+  project.status = "agent_working";
+  recordAudit("Agentenauftrag gestartet", project.name, `${missing.length} Pflichtnachweise in kontrollierte Aufgaben ueberfuehrt.`);
+  recordApiEvent("POST", "/api/agent-tasks", `${project.name}: ${missing.length} Aufgaben`);
+  saveData();
+  showToast("Agentenauftrag wurde erstellt und im Projekt protokolliert.");
+}
+
+function handleAgentAction(action) {
+  const project = getProject() || state.data.projects.find((item) => item.id === "pyrolysis") || state.data.projects[0];
+  const label = {
+    accept: "Empfehlung uebernommen",
+    edit: "Empfehlung zur Bearbeitung markiert",
+    reject: "Empfehlung abgelehnt"
+  }[action] || "Agentenaktion";
+  if (project) {
+    recordAudit(label, project.name, "Agentenhinweis wurde durch Management bewertet.");
+    recordApiEvent("POST", "/api/agent-feedback", `${project.name}: ${action}`);
+    saveData();
+  }
+  if (action === "accept" && project?.id) {
+    openProject(project.id);
+    return;
+  }
+  showToast(`${label}.`);
 }
 
 function submitLead(event) {
@@ -447,6 +623,9 @@ function submitLead(event) {
   leads.push(lead);
   localStorage.setItem(LEADS_KEY, JSON.stringify(leads));
   localStorage.setItem(UNLOCK_KEY, String(Date.now() + 24 * 60 * 60 * 1000));
+  recordAudit("Lead erfasst", "QR-Demo", `Kontakt fuer ${email} vorbereitet.`);
+  recordApiEvent("POST", "/api/leads", `Lead an ${leadRecipient}`);
+  saveData();
   state.modal = null;
   showToast(`Demo fuer 24 Stunden freigeschaltet. Lead-Benachrichtigung an ${leadRecipient} vorbereitet.`);
 }
@@ -500,6 +679,7 @@ function renderApp() {
       ${renderSidebar()}
       <main class="main">
         ${renderTopbar()}
+        ${renderDemoRail()}
         ${renderScreen()}
       </main>
       ${state.drawerOpen ? renderDrawer() : ""}
@@ -549,6 +729,27 @@ function renderTopbar() {
   `;
 }
 
+function renderDemoRail() {
+  const activeIndex = getDemoStepIndex();
+  const active = demoFlow[activeIndex];
+  return `
+    <section class="demo-rail" aria-label="Demo-Regie">
+      <div>
+        <span class="eyebrow">Demo-Regie</span>
+        <strong>${escapeHtml(active.label)}</strong>
+        <span class="meta">Schritt ${activeIndex + 1} von ${demoFlow.length}</span>
+      </div>
+      <div class="demo-flow">
+        ${demoFlow.map((step, index) => `
+          <button class="${index === activeIndex ? "active" : ""} ${index < activeIndex ? "done" : ""}" data-demo-screen="${step.screen}">
+            <span>${index + 1}</span>${escapeHtml(step.label)}
+          </button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function screenTitle() {
   return {
     dashboard: "Business Development Dashboard",
@@ -584,12 +785,16 @@ function renderScreen() {
 function renderDashboard() {
   const projects = state.data.projects.slice().sort((a, b) => b.priority - a.priority);
   const gateOpen = projects.filter((project) => project.stage.startsWith("gate")).length;
+  const agentTasks = projects.reduce((sum, project) => sum + (project.agentTasks?.length || 0), 0);
+  const avgProgress = projects.length
+    ? Math.round(projects.reduce((sum, project) => sum + project.progress, 0) / projects.length)
+    : 0;
   return `
     <section class="kpi-grid">
       ${renderKpi(projects.length, "aktive Projekte")}
       ${renderKpi(gateOpen, "Gate-Entscheidungen offen")}
-      ${renderKpi(state.data.archived.length, "Projekte im Archiv")}
-      ${renderKpi("18h", "geschaetzte Agentenzeit gespart")}
+      ${renderKpi(agentTasks, "aktive Agentenaufgaben")}
+      ${renderKpi(`${avgProgress}%`, "Portfolio-Informationsgrad")}
     </section>
     <section class="two-col">
       <div class="panel">
@@ -606,11 +811,18 @@ function renderDashboard() {
           <span class="eyebrow">Agentenbriefing</span>
           <p><strong>Pflanzenkohle zuerst bearbeiten.</strong> Gate 2 ist vollstaendig vorbereitet. Management kann heute ueber Go in Stage 3 entscheiden.</p>
           <div class="agent-actions">
-            <button data-action="agent-accept">Übernehmen</button>
-            <button data-action="agent-edit">Bearbeiten</button>
-            <button data-action="agent-reject">Ablehnen</button>
+            <button data-agent-action="accept">Übernehmen</button>
+            <button data-agent-action="edit">Bearbeiten</button>
+            <button data-agent-action="reject">Ablehnen</button>
           </div>
         </div>
+        <div class="panel decision-brief">
+          <span class="eyebrow">Entscheidung heute</span>
+          <h3>Gate 2 fuer Pflanzenkohle</h3>
+          <p class="meta">Empfehlung: Go in Stage 3. Begruendung: 100% Pflichtinformationen, klarer Public Value und pruefbarer Pilotpfad.</p>
+          <button class="primary-btn" data-open-gate="pyrolysis">Entscheidungsansicht oeffnen</button>
+        </div>
+        ${renderAuditLog()}
         <div class="panel">
           <span class="eyebrow">QR-Code Ziel</span>
           <p class="meta">Stabile Vercel-URL fuer die Demo. Spaeter kann eine eigene Domain oder ein Redirect vorgeschaltet werden.</p>
@@ -637,19 +849,39 @@ function renderKpi(value, label) {
 
 function renderProjectRow(project) {
   const stage = getStage(project.stage);
+  const taskCount = project.agentTasks?.length || 0;
   return `
     <article class="project-row">
       <div>
-        <h3>${project.name}</h3>
+        <h3>${escapeHtml(project.name)}</h3>
         <div class="badge-row">
           <span class="badge blue">${stage?.title || "Stage"}</span>
           <span class="badge ${project.progress === 100 ? "green" : "warning"}">${project.progress}% Pflichtinformationen</span>
+          ${taskCount ? `<span class="badge blue">${taskCount} Agentenaufgabe${taskCount === 1 ? "" : "n"}</span>` : ""}
           <span class="badge">${project.nextDecision}</span>
         </div>
-        <p class="meta">${project.summary}</p>
+        <p class="meta">${escapeHtml(project.summary)}</p>
       </div>
       <button class="primary-btn" data-open-project="${project.id}">Öffnen</button>
     </article>
+  `;
+}
+
+function renderAuditLog() {
+  const items = state.data.auditLog.slice(0, 4);
+  return `
+    <div class="panel audit-panel">
+      <span class="eyebrow">Audit Trail</span>
+      <div class="timeline">
+        ${items.map((item) => `
+          <div class="timeline-item">
+            <strong>${escapeHtml(item.action)}</strong>
+            <span>${escapeHtml(item.project)}</span>
+            <p class="meta">${escapeHtml(item.detail)}</p>
+          </div>
+        `).join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -668,7 +900,7 @@ function renderStageColumn(stage) {
   return `
     <section class="stage-column">
       <header class="stage-head">
-        <button class="stage-menu" data-screen="settings">Menu</button>
+        <button class="stage-menu" data-screen="settings" aria-label="Stage-Einstellungen öffnen">☰</button>
         <h2>${stage.title}: ${stage.subtitle}</h2>
         <p>${stage.description}</p>
         <span class="badge">${projects.length} Projekt${projects.length === 1 ? "" : "e"}</span>
@@ -681,14 +913,16 @@ function renderStageColumn(stage) {
 }
 
 function renderProjectCard(project, archived = false) {
+  const taskCount = project.agentTasks?.length || 0;
   return `
     <button class="project-card" ${archived ? `data-screen="archive"` : `data-open-project="${project.id}"`}>
-      <h3>${project.name}</h3>
-      <div class="meta">${project.owner} · ${project.field}</div>
+      <h3>${escapeHtml(project.name)}</h3>
+      <div class="meta">${escapeHtml(project.owner)} · ${escapeHtml(project.field)}</div>
       ${renderProgress(project.progress)}
       <div class="badge-row">
         <span class="badge ${project.progress === 100 ? "green" : "warning"}">${project.progress === 100 ? "Gate-ready" : "Nachweise offen"}</span>
-        <span class="badge">${project.nextDecision || project.archiveReason || "Review"}</span>
+        ${taskCount ? `<span class="badge blue">${taskCount} Agent Task${taskCount === 1 ? "" : "s"}</span>` : ""}
+        <span class="badge">${escapeHtml(project.nextDecision || project.archiveReason || "Review")}</span>
       </div>
     </button>
   `;
@@ -708,15 +942,17 @@ function renderDrawer() {
   const project = getProject();
   if (!project) return "";
   const stage = getStage(project.stage);
-  const missing = project.evidence.filter((item) => item.required && !item.done);
+  const evidenceList = project.stage === "stage-3" ? project.stage3Evidence : project.evidence;
+  const missing = evidenceList.filter((item) => item.required && !item.done);
+  const tasks = project.agentTasks || [];
   return `
     <div class="drawer-backdrop" data-action="close-drawer"></div>
     <aside class="drawer">
       <header class="drawer-head">
         <div>
           <span class="eyebrow">${stage?.title || "Projekt"} · ${stage?.subtitle || ""}</span>
-          <h2>${project.name}</h2>
-          <p class="meta">${project.summary}</p>
+          <h2>${escapeHtml(project.name)}</h2>
+          <p class="meta">${escapeHtml(project.summary)}</p>
         </div>
         <button class="close-btn" data-action="close-drawer">X</button>
       </header>
@@ -725,20 +961,31 @@ function renderDrawer() {
         <span class="eyebrow">Prozessassistent</span>
         <p><strong>Nächster Schritt:</strong> ${project.stage === "gate-2" ? "Gate-2-Entscheidung im Management vorbereiten." : "Pflichtnachweise vervollstaendigen."}</p>
         <div class="button-row">
-          <button class="secondary-btn" data-action="agent-accept">Übernehmen</button>
-          <button class="quiet-btn" data-action="agent-edit">Bearbeiten</button>
-          <button class="quiet-btn" data-action="agent-reject">Ablehnen</button>
+          <button class="secondary-btn" data-agent-action="accept">Übernehmen</button>
+          <button class="quiet-btn" data-agent-action="edit">Bearbeiten</button>
+          <button class="quiet-btn" data-agent-action="reject">Ablehnen</button>
         </div>
       </div>
       <div class="panel">
         <h3>Pflichtnachweise</h3>
         <div class="checklist">
-          ${project.evidence.map((item) => `
+          ${evidenceList.map((item) => `
             <div class="check-item">
               <input type="checkbox" ${item.done ? "checked" : ""} disabled />
-              <div><strong>${item.label}</strong><br /><span class="meta">${item.done ? "erfuellt" : "offen"}</span></div>
+              <div><strong>${escapeHtml(item.label)}</strong><br /><span class="meta">${item.done ? "erfuellt" : "offen"}</span></div>
             </div>
           `).join("")}
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Agentenaufgaben</h3>
+        <div class="task-list">
+          ${tasks.length ? tasks.map((task) => `
+            <div class="task-row">
+              <div><strong>${escapeHtml(task.label)}</strong><br /><span class="meta">${escapeHtml(task.owner)} · ${escapeHtml(task.status)}</span></div>
+              <span class="badge blue">kontrolliert</span>
+            </div>
+          `).join("") : `<div class="empty">Noch keine Agentenaufgaben fuer dieses Projekt.</div>`}
         </div>
       </div>
       <div class="button-row">
@@ -758,7 +1005,7 @@ function renderGate() {
     <section class="gate-layout">
       <div class="panel">
         <span class="eyebrow">Gate 2 · Invest + Rechtsform</span>
-        <h2>${project.name}</h2>
+        <h2>${escapeHtml(project.name)}</h2>
         <p class="meta">Entscheidung ueber Pilotbudget, Betreiberstruktur und Ueberfuehrung in Stage 3.</p>
         ${renderProgress(project.progress)}
         <div>
@@ -779,6 +1026,7 @@ function renderGate() {
         <div class="panel agent-panel">
           <span class="eyebrow">BD-Experte der eGLV</span>
           <p><strong>Empfehlung: Go.</strong> Die Pflichtinformationen sind vollstaendig. Der Pilotpfad ist belastbar genug, um Stage 3 als Reallabor zu starten.</p>
+          <div class="api-note">Nach Dokumentation: <strong>POST /api/decisions</strong> und Audit Trail.</div>
         </div>
         <div class="panel">
           <h3>Managemententscheidung</h3>
@@ -818,14 +1066,14 @@ function renderStage3() {
     <section class="two-col">
       <div class="panel">
         <span class="eyebrow">Stage 3 · Pilotierung / Reallabor</span>
-        <h2>${project.name}</h2>
+        <h2>${escapeHtml(project.name)}</h2>
         <p class="meta">Hier wird sichtbar, welche Nachweise fuer Pilotierung, Reallabor und spaetere Gate-3-Entscheidung fehlen.</p>
         ${renderProgress(project.progress)}
         <div class="checklist">
           ${project.stage3Evidence.map((item) => `
             <label class="check-item">
               <input type="checkbox" ${item.done ? "checked" : ""} data-stage3-evidence="${item.id}" />
-              <div><strong>${item.label}</strong><br /><span class="meta">${item.done ? "erfuellt" : "offen"}</span></div>
+              <div><strong>${escapeHtml(item.label)}</strong><br /><span class="meta">${item.done ? "erfuellt" : "offen"}</span></div>
             </label>
           `).join("")}
         </div>
@@ -834,6 +1082,18 @@ function renderStage3() {
         <div class="panel agent-panel">
           <span class="eyebrow">BD-Experte</span>
           <p><strong>Fokus fuer Stage 3:</strong> Standort, Lead-User, EHS-Risiken und Pilotbudget priorisieren. Ohne Betriebsreife sollte Gate 3 nicht freigegeben werden.</p>
+          <button class="secondary-btn" data-action="agent-collect">Agentenaufgaben fuer offene Nachweise erstellen</button>
+        </div>
+        <div class="panel">
+          <h3>Aktive Agentenaufgaben</h3>
+          <div class="task-list">
+            ${(project.agentTasks || []).length ? project.agentTasks.map((task) => `
+              <div class="task-row">
+                <div><strong>${escapeHtml(task.label)}</strong><br /><span class="meta">${escapeHtml(task.owner)} · ${escapeHtml(task.status)}</span></div>
+                <span class="badge blue">BD Agent</span>
+              </div>
+            `).join("") : `<div class="empty">Noch keine Aufgaben erzeugt.</div>`}
+          </div>
         </div>
         <div class="panel">
           <h3>Demo: Gate 3 scheitert</h3>
@@ -857,8 +1117,8 @@ function renderArchive() {
         ${archived.length ? archived.map((project) => `
           <article class="archive-row">
             <div>
-              <h3>${project.name}</h3>
-              <p class="meta">${project.archiveReason}<br />Archiviert am ${new Date(project.archivedAt).toLocaleString("de-DE")}</p>
+              <h3>${escapeHtml(project.name)}</h3>
+              <p class="meta">${escapeHtml(project.archiveReason)}<br />Archiviert am ${new Date(project.archivedAt).toLocaleString("de-DE")}</p>
               <div class="field">
                 <label>Erinnerung setzen</label>
                 <input type="date" value="${project.reminderAt || ""}" data-reminder="${project.id}" />
@@ -879,7 +1139,7 @@ function renderSettings() {
         <div class="panel">
           <span class="eyebrow">Admin-Prozesseditor</span>
           <h2>Stages, Gates und Regeln</h2>
-          <p class="meta">Admins koennen Regeln hinzufuegen. Alle anderen Nutzer folgen dem definierten Prozess.</p>
+          <p class="meta">Admins koennen Prozessdefinitionen veraendern. Management und Business Development folgen dem freigegebenen Stage-Gate-Modell.</p>
           <div class="card-stack">
             ${stageDefinitions.filter((stage) => stage.id !== "archive").map((stage) => `
               <div class="integration-row">
@@ -899,21 +1159,54 @@ function renderSettings() {
             <button class="primary-btn" type="submit">Regel speichern</button>
           </form>
           <div class="card-stack">
-            ${state.data.rules.map((rule) => `<div class="integration-row"><div>${rule.label}</div><span class="badge green">${rule.scope}</span></div>`).join("")}
+            ${state.data.rules.map((rule) => `<div class="integration-row"><div>${escapeHtml(rule.label)}</div><span class="badge green">${escapeHtml(rule.scope)}</span></div>`).join("")}
           </div>
         </div>
       </div>
-      <div class="panel">
-        <span class="eyebrow">APIs und Infrastruktur</span>
-        <h2>Microsoft-Fit</h2>
-        <p class="meta">Alle Bausteine werden fuer die Demo als vorhandene Infrastrukturannahme dargestellt.</p>
-        <div class="architecture-map">
-          ${microsoftIntegrations.map(([name, description]) => `
-            <div class="integration-row">
-              <div><strong>${name}</strong><br /><span class="meta">${description}</span></div>
-              <span class="badge green">vorhanden</span>
-            </div>
-          `).join("")}
+      <div>
+        <div class="panel">
+          <span class="eyebrow">APIs und Infrastruktur</span>
+          <h2>Microsoft-Fit</h2>
+          <p class="meta">Alle Bausteine werden fuer die Demo als vorhandene Infrastrukturannahme dargestellt.</p>
+          <div class="architecture-flow">
+            <span>Entra ID</span>
+            <span>Static Web App</span>
+            <span>Functions API</span>
+            <span>SharePoint + Power BI</span>
+          </div>
+          <div class="architecture-map">
+            ${microsoftIntegrations.map(([name, description]) => `
+              <div class="integration-row">
+                <div><strong>${escapeHtml(name)}</strong><br /><span class="meta">${escapeHtml(description)}</span></div>
+                <span class="badge green">vorhanden</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div class="panel api-contracts">
+          <span class="eyebrow">API Blueprint</span>
+          <h2>Backend-Schnittstellen</h2>
+          <div class="api-table">
+            ${apiContracts.map(([method, path, purpose, target]) => `
+              <div class="api-row">
+                <span class="method">${method}</span>
+                <code>${path}</code>
+                <span>${escapeHtml(purpose)}</span>
+                <span class="badge blue">${escapeHtml(target)}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+        <div class="panel">
+          <span class="eyebrow">Letzte API-Events</span>
+          <div class="timeline">
+            ${state.data.apiEvents.slice(0, 5).map((event) => `
+              <div class="timeline-item">
+                <strong>${escapeHtml(event.method)} ${escapeHtml(event.path)}</strong>
+                <p class="meta">${escapeHtml(event.entity)} · ${new Date(event.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}</p>
+              </div>
+            `).join("")}
+          </div>
         </div>
       </div>
     </section>
@@ -977,6 +1270,15 @@ function bindEvents() {
   document.querySelectorAll("[data-screen]").forEach((button) => {
     button.addEventListener("click", () => setScreen(button.dataset.screen));
   });
+  document.querySelectorAll("[data-demo-screen]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.demoScreen === "gate") {
+        openGate("pyrolysis");
+        return;
+      }
+      setScreen(button.dataset.demoScreen);
+    });
+  });
   document.querySelector("[data-form='login']")?.addEventListener("submit", handleLogin);
   document.querySelector("[data-action='mfa']")?.addEventListener("click", handleMfa);
   document.querySelector("[data-action='reset']")?.addEventListener("click", resetDemo);
@@ -1009,12 +1311,15 @@ function bindEvents() {
   document.querySelectorAll("[data-reminder]").forEach((input) => {
     input.addEventListener("change", () => setArchiveReminder(input.dataset.reminder, input.value));
   });
+  document.querySelectorAll("[data-action='agent-collect']").forEach((button) => {
+    button.addEventListener("click", assignAgentCollection);
+  });
+  document.querySelectorAll("[data-agent-action]").forEach((button) => {
+    button.addEventListener("click", () => handleAgentAction(button.dataset.agentAction));
+  });
   document.querySelector("[data-form='lead']")?.addEventListener("submit", submitLead);
   document.querySelector("[data-form='project']")?.addEventListener("submit", addProject);
   document.querySelector("[data-form='rule']")?.addEventListener("submit", addRule);
-  document.querySelectorAll("[data-action^='agent']").forEach((button) => {
-    button.addEventListener("click", () => showToast("Agentenaktion wurde fuer die Demo kontrolliert vorgemerkt."));
-  });
 }
 
 render();

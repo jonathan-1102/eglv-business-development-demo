@@ -19,14 +19,22 @@ http://localhost:5173
 1. Login mit `management@eglv-demo.de`.
 2. Visuelle Zwei-Faktor-Authentifizierung bestaetigen.
 3. Dashboard zeigt Management-Prioritaeten.
-4. Kanban zeigt Pflanzenkohle/Pyrolyse bei Gate 2.
-5. Projektkarte oeffnet einen rechten Drawer.
-6. Gate 2 kann mit `Go` entschieden werden.
-7. Projekt wird in Stage 3 ueberfuehrt.
-8. Stage 3 zeigt Pflichtnachweise und Prozentfortschritt.
-9. Gate 3 kann fuer die Demo scheitern.
-10. Projekt landet im Archiv mit Erinnerung.
-11. Einstellungen zeigen Stage-/Gate-Regeln und Microsoft-Infrastrukturfit.
+4. Demo-Regie zeigt den gefuehrten Presenter-Flow.
+5. Kanban zeigt Pflanzenkohle/Pyrolyse bei Gate 2.
+6. Projektkarte oeffnet einen rechten Drawer mit Pflichtnachweisen und Agentenaufgaben.
+7. Gate 2 kann mit `Go` entschieden werden.
+8. Projekt wird in Stage 3 ueberfuehrt.
+9. Stage 3 zeigt Pflichtnachweise, Prozentfortschritt und kontrollierte Agentenaufgaben.
+10. Gate 3 kann fuer die Demo scheitern.
+11. Projekt landet im Archiv mit Erinnerung.
+12. Einstellungen zeigen Stage-/Gate-Regeln, Microsoft-Infrastrukturfit, API-Blueprint und letzte API-Events.
+
+## Produktlogik
+
+- Jede Managemententscheidung schreibt einen Audit-Eintrag und einen simulierten API-Event.
+- Agenten handeln kontrolliert: `Übernehmen`, `Bearbeiten`, `Ablehnen` und Aufgabenanlage fuer fehlende Pflichtnachweise.
+- Neue Projekte und Regeln koennen eingegeben werden; dynamische Texte werden vor dem Rendern escaped.
+- Die API-Sicht ist als Vercel-Prototyp visualisiert und laesst sich spaeter auf Azure Functions, Entra ID, SharePoint, Power BI und Azure Data Store uebertragen.
 
 ## Lead-Gate
 
