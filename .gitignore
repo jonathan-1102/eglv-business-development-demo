@@ -1,0 +1,21 @@
+.DS_Store
+node_modules/
+.vercel/
+
+# Local transcription/model artifacts
+.transcribe_deps/
+.whisper_models/
+transcripts/
+
+# Generated outputs and renders
+outputs/
+qa/
+Hamburg_Wasser_Praxisabgleich_render/
+
+# Office temp files
+~$*
+
+# Local env/secrets
+.env
+.env.*
+
