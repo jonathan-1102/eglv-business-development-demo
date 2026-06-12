@@ -8,7 +8,7 @@ const staticRoot = join(root, "public");
 
 const files = {
   html: await readFile(join(staticRoot, "index.html"), "utf8"),
-  app: await readFile(join(staticRoot, "app.js"), "utf8"),
+  app: await readFile(join(staticRoot, "client.js"), "utf8"),
   css: await readFile(join(staticRoot, "styles.css"), "utf8"),
   bg: await readFile(join(staticRoot, "eglv-life-bg.svg"), "utf8"),
   packageJson: await readFile(join(root, "package.json"), "utf8"),
@@ -31,8 +31,8 @@ function containsAll(file, values) {
   return values.every((value) => contains(file, value));
 }
 
-check("app files exist", ["index.html", "app.js", "styles.css"].every((file) => existsSync(join(staticRoot, file))) && existsSync(join(root, "scripts", "dev-server.mjs")) && existsSync(join(root, "vercel.json")));
-check("index loads app assets", containsAll("html", ["./styles.css", "./app.js", "EGLV Business Development Demo"]));
+check("app files exist", ["index.html", "client.js", "styles.css"].every((file) => existsSync(join(staticRoot, file))) && existsSync(join(root, "scripts", "dev-server.mjs")) && existsSync(join(root, "vercel.json")));
+check("index loads app assets", containsAll("html", ["./styles.css", "./client.js", "EGLV Business Development Demo"]));
 check("npm test is wired", contains("packageJson", "\"test\": \"node tests/acceptance.test.mjs\""));
 check("vercel static output is configured", containsAll("vercel", ["\"outputDirectory\": \"public\"", "\"buildCommand\": \"npm test\"", "\"source\": \"/(.*)\"", "\"destination\": \"/index.html\""]));
 check("package does not expose browser app as node start", !contains("packageJson", "\"start\":"));
