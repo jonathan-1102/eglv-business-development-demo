@@ -15,8 +15,8 @@ When importing this repository into Vercel, set:
 ```text
 Root Directory: eglv-demo-app
 Framework Preset: Other
-Build Command: empty
-Output Directory: .
+Build Command: npm test
+Output Directory: public
 ```
 
 ## Demo Flow
@@ -39,4 +39,3 @@ Supporting project documentation lives in:
 ```text
 eglv-app-development
 ```
-

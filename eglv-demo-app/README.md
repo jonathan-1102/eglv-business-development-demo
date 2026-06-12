@@ -1,6 +1,6 @@
-# eGLV Business Development Demo App
+# EGLV Business Development Demo App
 
-Statischer, dependency-freier MVP-Prototyp fuer die management-fokussierte eGLV-Demo.
+Statischer, dependency-freier MVP-Prototyp fuer die management-fokussierte EGLV-Demo.
 
 ## Start
 
@@ -33,8 +33,10 @@ http://localhost:5173
 
 - Jede Managemententscheidung schreibt einen Audit-Eintrag und einen simulierten API-Event.
 - Agenten handeln kontrolliert: `Übernehmen`, `Bearbeiten`, `Ablehnen` und Aufgabenanlage fuer fehlende Pflichtnachweise.
-- Neue Projekte und Regeln koennen eingegeben werden; dynamische Texte werden vor dem Rendern escaped.
+- Neue Projekte und Regeln koennen eingegeben werden; neue Admin-Regeln wirken als zusaetzliche Pflichtnachweise auf neu angelegte Projekte.
+- Nachweise fuehren Owner, Quelle und Faelligkeit, damit Agentenaufgaben und Managemententscheidungen konkret bleiben.
 - Die API-Sicht ist als Vercel-Prototyp visualisiert und laesst sich spaeter auf Azure Functions, Entra ID, SharePoint, Power BI und Azure Data Store uebertragen.
+- Die vollstaendige Agent-API-Liste liegt in `../eglv-app-development/agent-api-calls.md`.
 
 ## Lead-Gate
 
@@ -42,7 +44,7 @@ Nach ca. 30 Sekunden erscheint ein Lead-Capture-Modal. Nach DSGVO-Zustimmung wir
 
 ## Deployment
 
-Der Ordner ist fuer ein statisches Vercel-Deployment vorbereitet. Spaeter kann eine eigene Domain oder ein Redirect vor die Vercel-URL gelegt werden. Langfristiges Ziel bleibt Azure Static Web Apps.
+Der Ordner ist fuer ein statisches Vercel-Deployment vorbereitet. Die Browser-App liegt in `public/`, Vercel nutzt `outputDirectory: public` und fuehrt beim Deployment `npm test` aus. Spaeter kann eine eigene Domain oder ein Redirect vor die Vercel-URL gelegt werden. Langfristiges Ziel bleibt Azure Static Web Apps.
 
 ## Entwicklungsorchestrierung
 
